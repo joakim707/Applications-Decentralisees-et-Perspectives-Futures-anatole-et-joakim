@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ma Première DApp</title>
+    <script src="https://cdn.jsdelivr.net/npm/web3@latest/dist/web3.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        h3 {
+            color: #555;
+            margin-top: 30px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin-top: 10px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        button:hover:not(:disabled) {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #status {
+            margin-top: 20px;
+            font-weight: bold;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #contractResult {
+            margin-top: 10px;
+            color: blue;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .connected {
+            color: green;
+            background-color: #e8f5e9;
+        }
+        .disconnected {
+            color: red;
+            background-color: #ffebee;
+        }
+        .info-box {
+            background-color: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            border-left: 4px solid #2196F3;
+        }
+        .input-group {
+            margin-top: 20px;
+        }
+        input[type="number"] {
+            padding: 8px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 200px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Interagir avec mon Smart Contract</h1>
+        <p>Statut de la connexion MetaMask : <span id="status" class="disconnected">Déconnecté</span></p>
+        <button id="connectWallet">Connecter MetaMask</button>
+
+        <h3>Interaction avec le Smart Contract</h3>
+        <button id="callContractFunction" disabled>Appeler ma Fonction (getValue)</button>
+        <p>Résultat du Smart Contract : <span id="contractResult">N/A</span></p>
+
+        <div class="input-group">
+            <h3>Modifier la valeur</h3>
+            <input type="number" id="newValueInput" placeholder="Entrez une nouvelle valeur" value="42">
+            <br>
+            <button id="setValueButton" disabled>Définir la valeur (setValue)</button>
+        </div>
+
+        <div class="info-box">
+            <strong>Instructions :</strong>
+            <ol>
+                <li>Assurez-vous que MetaMask est installé et déverrouillé</li>
+                <li>Connectez MetaMask au réseau "Localhost 8545" (Hardhat)</li>
+                <li>Déployez le contrat avec: <code>npm run deploy:localhost</code></li>
+                <li>Mettez à jour CONTRACT_ADDRESS et CONTRACT_ABI dans ce fichier</li>
+                <li>Cliquez sur "Connecter MetaMask"</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        let web3;
+        let accounts;
+        let myContract;
+        
+        // REMPLACEZ L'ADRESSE par celle obtenue après le déploiement !
+        const CONTRACT_ADDRESS = '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0'; // <-- Adresse du contrat déployé
+        const CONTRACT_ABI = [
+            {
+                "inputs": [],
+                "stateMutability": "nonpayable",
+                "type": "constructor"
+            },
+            {
+                "inputs": [],
+                "name": "getValue",
+                "outputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "",
+                        "type": "uint256"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "_newValue",
+                        "type": "uint256"
+                    }
+                ],
+                "name": "setValue",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [],
+                "name": "value",
+                "outputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "",
+                        "type": "uint256"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            }
+        ];
+
+        // ------------------------------------------------------------------
+        const connectWalletButton = document.getElementById('connectWallet');
+        const callContractButton = document.getElementById('callContractFunction');
+        const setValueButton = document.getElementById('setValueButton');
+        const statusSpan = document.getElementById('status');
+        const resultSpan = document.getElementById('contractResult');
+        const newValueInput = document.getElementById('newValueInput');
+
+        async function connectWallet() {
+            if (window.ethereum) {
+                web3 = new Web3(window.ethereum);
+                try {
+                    accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    
+                    // Vérifier que l'adresse du contrat est configurée
+                    if (CONTRACT_ADDRESS === '0xYourContractAddressHere') {
+                        alert('ATTENTION: Vous devez d\'abord mettre à jour CONTRACT_ADDRESS dans le code avec l\'adresse de votre contrat déployé!');
+                        return;
+                    }
+                    
+                    // Vérifier le réseau
+                    const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+                    const chainIdDecimal = parseInt(chainId, 16);
+                    console.log("Chain ID (hex):", chainId);
+                    console.log("Chain ID (decimal):", chainIdDecimal);
+                    
+                    // Vérifier que nous sommes sur le bon réseau
+                    if (chainIdDecimal !== 1337) {
+                        const switchNetwork = confirm(
+                            'Vous n\'êtes pas sur le réseau Hardhat Local (Chain ID: 1337).\n' +
+                            'Chain ID actuel: ' + chainIdDecimal + '\n\n' +
+                            'Voulez-vous que je vous aide à ajouter le réseau Hardhat Local ?'
+                        );
+                        
+                        if (switchNetwork) {
+                            try {
+                                await window.ethereum.request({
+                                    method: 'wallet_addEthereumChain',
+                                    params: [{
+                                        chainId: '0x539', // 1337 en hex
+                                        chainName: 'Hardhat Local',
+                                        nativeCurrency: {
+                                            name: 'ETH',
+                                            symbol: 'ETH',
+                                            decimals: 18
+                                        },
+                                        rpcUrls: ['http://127.0.0.1:8545'],
+                                        blockExplorerUrls: null
+                                    }]
+                                });
+                                
+                                // Demander de changer de réseau
+                                await window.ethereum.request({
+                                    method: 'wallet_switchEthereumChain',
+                                    params: [{ chainId: '0x539' }]
+                                });
+                                
+                                // Réessayer la connexion après le changement de réseau
+                                setTimeout(() => connectWallet(), 1000);
+                                return;
+                            } catch (switchError) {
+                                console.error("Erreur lors du changement de réseau:", switchError);
+                                alert('Impossible de changer de réseau. Veuillez ajouter manuellement le réseau "Hardhat Local" dans MetaMask.');
+                            }
+                        }
+                        statusSpan.textContent = 'Mauvais réseau';
+                        statusSpan.className = 'disconnected';
+                        return;
+                    }
+                    
+                    // Vérifier que le contrat existe à cette adresse
+                    console.log("Vérification du contrat à l'adresse:", CONTRACT_ADDRESS);
+                    const code = await web3.eth.getCode(CONTRACT_ADDRESS);
+                    console.log("Code du contrat:", code.substring(0, 20) + "...");
+                    
+                    if (code === '0x' || code === '0x0') {
+                        const errorMsg = 
+                            'ERREUR: Aucun contrat trouvé à l\'adresse ' + CONTRACT_ADDRESS + 
+                            '\n\nSolutions possibles:\n' +
+                            '1. Vérifiez que "npm run node" est en cours d\'exécution\n' +
+                            '2. Redéployez le contrat: npm run deploy:localhost\n' +
+                            '3. Mettez à jour CONTRACT_ADDRESS dans index.html avec la nouvelle adresse\n' +
+                            '4. Vérifiez que vous êtes sur le réseau "Hardhat Local" (Chain ID: 1337)';
+                        alert(errorMsg);
+                        statusSpan.textContent = 'Contrat non trouvé';
+                        statusSpan.className = 'disconnected';
+                        return;
+                    }
+                    
+                    console.log("✅ Contrat trouvé à l'adresse:", CONTRACT_ADDRESS);
+                    
+                    myContract = new web3.eth.Contract(CONTRACT_ABI, CONTRACT_ADDRESS);
+                    
+                    // Tester une lecture simple pour vérifier que tout fonctionne
+                    try {
+                        const testValue = await myContract.methods.value().call();
+                        console.log("Test de lecture réussi, valeur:", testValue);
+                    } catch (testError) {
+                        console.error("Erreur lors du test de lecture:", testError);
+                        alert('ERREUR: Impossible de lire le contrat. Vérifiez que:\n1. Le contrat est bien déployé à cette adresse\n2. Vous êtes sur le bon réseau (Hardhat Local)\n3. L\'ABI est correct\n\nErreur: ' + testError.message);
+                        statusSpan.textContent = 'Erreur de connexion au contrat';
+                        statusSpan.className = 'disconnected';
+                        return;
+                    }
+                    
+                    statusSpan.textContent = 'Connecté';
+                    statusSpan.className = 'connected';
+                    callContractButton.disabled = false;
+                    setValueButton.disabled = false;
+                    console.log("Connecté avec le compte :", accounts[0]);
+                    console.log("Contrat initialisé à l'adresse :", CONTRACT_ADDRESS);
+                } catch (error) {
+                    console.error("L'utilisateur a refusé la connexion ou une erreur est survenue.", error);
+                    statusSpan.textContent = 'Connexion refusée';
+                    statusSpan.className = 'disconnected';
+                }
+            } else {
+                statusSpan.textContent = 'MetaMask non détecté. Veuillez l\'installer.';
+                statusSpan.className = 'disconnected';
+                alert('MetaMask non détecté. Veuillez installer l\'extension de navigateur.');
+            }
+        }
+
+        async function callContractFunction() {
+            if (!myContract || !accounts || accounts.length === 0) {
+                alert('Veuillez d\'abord connecter votre portefeuille MetaMask.');
+                return;
+            }
+            try {
+                callContractButton.disabled = true;
+                callContractButton.textContent = 'Chargement...';
+                
+                // Essayer d'abord avec value() qui est une variable publique
+                let result;
+                try {
+                    result = await myContract.methods.value().call();
+                } catch (err) {
+                    // Si ça échoue, essayer avec getValue()
+                    console.log("Tentative avec value() échouée, essai avec getValue()");
+                    result = await myContract.methods.getValue().call();
+                }
+                
+                resultSpan.textContent = result.toString();
+                console.log("Résultat de la fonction contractuelle :", result);
+                callContractButton.textContent = 'Appeler ma Fonction (getValue)';
+                callContractButton.disabled = false;
+            } catch (error) {
+                console.error("Erreur lors de l'appel de la fonction contractuelle :", error);
+                resultSpan.textContent = 'Erreur ! Vérifiez la console pour plus de détails.';
+                alert('Erreur lors de la lecture: ' + error.message + '\n\nVérifiez que:\n1. Le nœud Hardhat est en cours d\'exécution\n2. Le contrat est bien déployé\n3. Vous êtes sur le bon réseau');
+                callContractButton.textContent = 'Appeler ma Fonction (getValue)';
+                callContractButton.disabled = false;
+            }
+        }
+
+        async function setValue() {
+            if (!myContract || !accounts || accounts.length === 0) {
+                alert('Veuillez d\'abord connecter votre portefeuille MetaMask.');
+                return;
+            }
+            
+            const newValue = parseInt(newValueInput.value);
+            if (isNaN(newValue)) {
+                alert('Veuillez entrer un nombre valide.');
+                return;
+            }
+
+            try {
+                setValueButton.disabled = true;
+                setValueButton.textContent = 'Envoi en cours...';
+                
+                // Exemple d'appel d'une fonction 'transaction' (écriture de données)
+                const tx = await myContract.methods.setValue(newValue).send({ from: accounts[0] });
+                console.log("Transaction envoyée pour setValue:", tx);
+                
+                // Attendre que la transaction soit minée
+                resultSpan.textContent = `Transaction confirmée! Nouvelle valeur: ${newValue}`;
+                
+                // Rafraîchir la valeur affichée
+                await callContractFunction();
+                
+                setValueButton.textContent = 'Définir la valeur (setValue)';
+                setValueButton.disabled = false;
+            } catch (error) {
+                console.error("Erreur lors de l'envoi de la transaction :", error);
+                resultSpan.textContent = 'Erreur lors de la transaction !';
+                alert('Erreur: ' + error.message);
+                setValueButton.textContent = 'Définir la valeur (setValue)';
+                setValueButton.disabled = false;
+            }
+        }
+
+        connectWalletButton.addEventListener('click', connectWallet);
+        callContractButton.addEventListener('click', callContractFunction);
+        setValueButton.addEventListener('click', setValue);
+
+        // Vérifier si MetaMask est déjà connecté au chargement de la page
+        window.addEventListener('load', async () => {
+            if (window.ethereum) {
+                try {
+                    accounts = await window.ethereum.request({ method: 'eth_accounts' });
+                    if (accounts.length > 0) {
+                        await connectWallet();
+                    }
+                } catch (error) {
+                    console.error("Erreur lors de la vérification de la connexion:", error);
+                }
+            }
+        });
+    </script>
+</body>
+</html>

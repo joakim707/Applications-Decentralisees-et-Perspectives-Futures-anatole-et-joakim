@@ -1,0 +1,30 @@
+{
+  "name": "ma-premiere-dapp",
+  "version": "1.0.0",
+  "description": "Ma première application décentralisée (DApp)",
+  "main": "index.js",
+  "scripts": {
+    "compile": "hardhat compile",
+    "deploy": "hardhat run scripts/deploy.js",
+    "deploy:localhost": "hardhat run scripts/deploy.js --network localhost",
+    "node": "hardhat node",
+    "test": "hardhat test",
+    "get-abi": "node scripts/getABI.js",
+    "check-contract": "hardhat run scripts/checkContract.js --network localhost"
+  },
+  "keywords": [
+    "blockchain",
+    "ethereum",
+    "dapp",
+    "smart-contracts"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "hardhat": "^2.19.0"
+  },
+  "dependencies": {
+    "web3": "^4.3.0"
+  }
+}
